@@ -84,13 +84,13 @@ static inline void push_call_record(id _self, Class _cls, SEL _cmd, uintptr_t lr
 #if _InternalMTCallTracePerformanceTestEnabled
         mach_timebase_info_data_t timeinfo_;
         mach_timebase_info(&timeinfo_);
-
+        
         uint64_t t0 = mach_absolute_time() * timeinfo_.numer / timeinfo_.denom;
-
+        
         static double pre_cost_sum = 0;
         static int pre_cost_sum_counter = 0;
 #endif
-
+        
         int nextIndex = (++cs->index);
         if (nextIndex >= cs->allocated_length) {
             cs->allocated_length += 64;
@@ -101,19 +101,19 @@ static inline void push_call_record(id _self, Class _cls, SEL _cmd, uintptr_t lr
         newRecord->cls = _cls;
         newRecord->cmd = _cmd;
         newRecord->lr = lr;
-
+        
         if (cs->is_main_thread && _call_record_enabled) {
             struct timeval now;
             gettimeofday(&now, NULL);
             newRecord->time = now.tv_sec * 1000000 + now.tv_usec;
         }
-
-
+        
+        
 #if _InternalMTCallTracePerformanceTestEnabled
         uint64_t t1 = mach_absolute_time() * timeinfo_.numer / timeinfo_.denom;
-
+        
         double elapsed = (t1 - t0) / 1000.f;
-
+        
         pre_cost_sum += elapsed;
         pre_cost_sum_counter++;
         if (pre_cost_sum_counter > 1000000) {
@@ -122,7 +122,7 @@ static inline void push_call_record(id _self, Class _cls, SEL _cmd, uintptr_t lr
             pre_cost_sum_counter = 0;
         }
 #endif
-
+        
     } else {
     }
 }
@@ -133,17 +133,17 @@ static inline uintptr_t pop_call_record() {
     int nextIndex = cs->index--;
     thread_call_record *pRecord = &cs->stack[nextIndex];
     if (cs->is_main_thread && _call_record_enabled) {
-
+        
 #if _InternalMTCallTracePerformanceTestEnabled
         mach_timebase_info_data_t timeinfo_;
         mach_timebase_info(&timeinfo_);
-
+        
         uint64_t t0 = mach_absolute_time() * timeinfo_.numer / timeinfo_.denom;
-
+        
         static double post_cost_sum = 0;
         static int post_cost_sum_counter = 0;
 #endif
-
+        
         struct timeval now;
         gettimeofday(&now, NULL);
         uint64_t time = now.tv_sec * 1000000 + now.tv_usec;
@@ -163,15 +163,15 @@ static inline uintptr_t pop_call_record() {
             log->depth = curIndex;
             log->sel = pRecord->cmd;
             log->cost = cost;
-
+            
             log->event_time = pRecord->time * 1e-6;
         }
-
+        
 #if _InternalMTCallTracePerformanceTestEnabled
         uint64_t t1 = mach_absolute_time() * timeinfo_.numer / timeinfo_.denom;
-
+        
         double elapsed = (t1 - t0) / 1000.f;
-
+        
         post_cost_sum += elapsed;
         post_cost_sum_counter++;
         if (post_cost_sum_counter > 1000000) {
@@ -198,56 +198,105 @@ uintptr_t after_objc_msgSend() {
 // http://infocenter.arm.com/help/topic/com.arm.doc.ihi0055b/IHI0055B_aapcs64.pdf
 // https://developer.apple.com/library/ios/documentation/Xcode/Conceptual/iPhoneOSABIReference/Articles/ARM64FunctionCallingConventions.html
 #define call(b, value)                            \
-    __asm volatile("stp x8, x9, [sp, #-16]!\n");  \
-    __asm volatile("mov x12, %0\n" ::"r"(value)); \
-    __asm volatile("ldp x8, x9, [sp], #16\n");    \
-    __asm volatile(#b " x12\n");
+__asm volatile("stp x8, x9, [sp, #-16]!\n");  \
+__asm volatile("mov x12, %0\n" ::"r"(value)); \
+__asm volatile("ldp x8, x9, [sp], #16\n");    \
+__asm volatile(#b " x12\n");
 
 #define save()                      \
-    __asm volatile(                 \
-        "stp x8, x9, [sp, #-16]!\n" \
-        "stp x6, x7, [sp, #-16]!\n" \
-        "stp x4, x5, [sp, #-16]!\n" \
-        "stp x2, x3, [sp, #-16]!\n" \
-        "stp x0, x1, [sp, #-16]!\n" \
-                                    \
-        "stp q8, q9, [sp, #-32]!\n" \
-        "stp q6, q7, [sp, #-32]!\n" \
-        "stp q4, q5, [sp, #-32]!\n" \
-        "stp q2, q3, [sp, #-32]!\n" \
-        "stp q0, q1, [sp, #-32]!\n");
+__asm volatile(                 \
+"stp x8, x9, [sp, #-16]!\n" \
+"stp x6, x7, [sp, #-16]!\n" \
+"stp x4, x5, [sp, #-16]!\n" \
+"stp x2, x3, [sp, #-16]!\n" \
+"stp x0, x1, [sp, #-16]!\n" \
+\
+"stp q8, q9, [sp, #-32]!\n" \
+"stp q6, q7, [sp, #-32]!\n" \
+"stp q4, q5, [sp, #-32]!\n" \
+"stp q2, q3, [sp, #-32]!\n" \
+"stp q0, q1, [sp, #-32]!\n");
 
 #define load()                    \
-    __asm volatile(               \
-        "ldp q0, q1, [sp], #32\n" \
-        "ldp q2, q3, [sp], #32\n" \
-        "ldp q4, q5, [sp], #32\n" \
-        "ldp q6, q7, [sp], #32\n" \
-        "ldp q8, q9, [sp], #32\n" \
-                                  \
-        "ldp x0, x1, [sp], #16\n" \
-        "ldp x2, x3, [sp], #16\n" \
-        "ldp x4, x5, [sp], #16\n" \
-        "ldp x6, x7, [sp], #16\n" \
-        "ldp x8, x9, [sp], #16\n");
+__asm volatile(               \
+"ldp q0, q1, [sp], #32\n" \
+"ldp q2, q3, [sp], #32\n" \
+"ldp q4, q5, [sp], #32\n" \
+"ldp q6, q7, [sp], #32\n" \
+"ldp q8, q9, [sp], #32\n" \
+\
+"ldp x0, x1, [sp], #16\n" \
+"ldp x2, x3, [sp], #16\n" \
+"ldp x4, x5, [sp], #16\n" \
+"ldp x6, x7, [sp], #16\n" \
+"ldp x8, x9, [sp], #16\n");
 
 #define link(b, value)                           \
-    __asm volatile("stp x8, lr, [sp, #-16]!\n"); \
-    __asm volatile("sub sp, sp, #16\n");         \
-    call(b, value);                              \
-    __asm volatile("add sp, sp, #16\n");         \
-    __asm volatile("ldp x8, lr, [sp], #16\n");
+__asm volatile("stp x8, lr, [sp, #-16]!\n"); \
+__asm volatile("sub sp, sp, #16\n");         \
+call(b, value);                              \
+__asm volatile("add sp, sp, #16\n");         \
+__asm volatile("ldp x8, lr, [sp], #16\n");
 
 #define ret() __asm volatile("ret\n");
 
+#define store_registers() \
+__asm volatile("stp x29, x30, [sp, #-0x10]\n");
+
+#define setup_fp_sp() \
+__asm volatile("str x0, [sp, #-0x20]\n"); \
+__asm volatile("mov x0, sp\n" \
+"sub x0, fp, x0\n");\
+__asm volatile(\
+"mov fp, sp\n"\
+"sub fp, fp, #0x10\n" \
+"sub sp, fp, x0\n");\
+__asm volatile("ldr x0, [fp, #-0x10]\n");
+
+#define mark_frame_layout() \
+__asm volatile(".cfi_def_cfa w29, 16\n" \
+".cfi_offset w30, -8\n" \
+".cfi_offset w29, -16\n");
+
+#define copy_stack_content() \
+__asm volatile("add x2, sp, #240\n"\
+"sub x2, fp, x2\n");\
+__asm volatile("mov x3, #0x0\n"\
+"add x7, fp, #0x10\n"\
+"add x4, sp, #240\n");\
+__asm volatile("cmp x3, x2\n"\
+"b.eq #24\n");\
+__asm volatile("ldr x5, [x7, x3]\n"\
+"str x5, [x4, x3]\n"\
+"add x3, x3, #0x8\n"\
+"cmp x3, x2\n"\
+"b.lt #-16\n");
+
+#define restore_fp_sp()\
+__asm volatile("mov sp, fp\n"\
+"add sp, sp, #0x10\n"\
+"ldr fp, [fp]\n");
+
 __attribute__((__naked__)) static void hook_Objc_msgSend() {
-//    __asm volatile(".cfi_def_cfa w29, 16\n" \
-//                   ".cfi_offset w30, -8\n" \
-//                   ".cfi_offset w29, -16\n");
-    // Save parameters.
+    // 1. store fp, lr value at top of the stack
+    store_registers()
+    
+    //2. setup new fp & sp
+    setup_fp_sp()
+    
+    //4. declare where we store our fp & lr, so that lldb can generate call stack.
+    //https://stackoverflow.com/questions/7534420/gas-explanation-of-cfi-def-cfa-offset
+    mark_frame_layout()
+    
+    //5. Save parameters. (Save register values)
     save()
+    
+    //6. copy the original stack frame
+    copy_stack_content()
+    
+    // 7. call before msgSend & msgSend & after msgSend
     __asm volatile("mov x2, lr\n");
-    __asm volatile("mov x3, x4\n");
+    //    __asm volatile("mov x3, x4\n");
     
     // Call our before_objc_msgSend.
     call(blr, &before_objc_msgSend)
@@ -264,27 +313,31 @@ __attribute__((__naked__)) static void hook_Objc_msgSend() {
     // Call our after_objc_msgSend.
     call(blr, &after_objc_msgSend)
     
-    // restore lr
+    //9. restore lr register, returned from after msgSend
     __asm volatile("mov lr, x0\n");
     
-    // Load original objc_msgSend return value.
+    //10. Load original objc_msgSend return value.
     load()
     
-    // return
+    //11. restore
+    restore_fp_sp()
+    
+    //12. return
     ret()
 }
 
 // MARK: public method
 
 void mth_calltraceStart(void) {
+    
     _call_record_enabled = true;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         pthread_key_create(&_thread_key, &release_thread_call_stack);
         rebind_symbols((struct rebinding[6]){
-                           {"objc_msgSend", (void *)hook_Objc_msgSend, (void **)&orig_objc_msgSend},
-                       },
-            1);
+            {"objc_msgSend", (void *)hook_Objc_msgSend, (void **)&orig_objc_msgSend},
+        },
+                       1);
     });
 }
 
